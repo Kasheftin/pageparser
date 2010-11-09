@@ -1,5 +1,18 @@
 <?php
 
+/* 
+	PageParser class by Kasheftin
+
+		v. 0.12 (2010.11.03)
+			- A new method findAll was added.
+			- A new method replace was added.
+			- A new method select was added.
+		v. 0.11 (2010.11.02)
+			- A new method rmempty was added.
+		v. 0.10 (2010.11.01)
+			- This is the first version of PageParser class.
+*/	
+
 class PageParser
 {
 	protected $htmls = array();
@@ -69,6 +82,94 @@ class PageParser
 		return $this;
 	}
 
+	public function findAll()
+	{
+		$args = func_get_args();
+		$args = $this->applyRegOpts($args);
+
+		if (!$args || !is_array($args)) return $this;
+
+		if (count($args) == 1)
+			return $this->matchAll($args[0]);
+
+		foreach($args as $i => $v)
+		{
+			if ($b || $i+1 == count($args)) $ar_after[] = $v;
+			elseif ($v == "*") $b = 1;
+			else $ar_before[] = $v;
+		}
+
+		$htmls = array_pop($this->htmls);
+
+		$res = array();
+		foreach($htmls as $i => $html)
+		{
+			$html_rest = $html;
+
+			while ($html_rest)
+			{
+				$html_val = $html_rest;
+
+				foreach($ar_before as $v)
+				{
+					$ar = preg_split($v,$html_val,2);
+					$html_val = $ar[1];
+				}
+
+				$html_rest = "";
+
+				foreach($ar_after as $v)
+				{
+					$ar = preg_split($v,$html_val,2);
+					$html_val = $ar[0];
+					if (!$html_rest) $html_rest = $ar[1];
+				}
+
+				$res[] = $html_val;
+			}
+		}
+		$this->htmls[] = $res;
+
+		return $this;
+	}
+
+	public function select()
+	{
+		$args = func_get_args();
+		$args = $this->applyRegOpts($args);
+
+		if (!$args || !is_array($args)) return $this;
+
+		$htmls = array_pop($this->htmls);
+
+		$res = array();
+		foreach($htmls as $i => $html)
+		{
+			foreach($args as $arg)
+				if (!preg_match($arg,$html)) continue 2;
+			$res[] = $html;
+		}
+		$this->htmls[] = $res;
+
+		return $this;
+	}
+
+	public function replace($s1,$s2)
+	{
+		$s1 = $this->applyRegOpts($s1);
+
+		$htmls = array_pop($this->htmls);
+
+		$res = array();
+		foreach($htmls as $i => $html)
+		{
+			$res[$i] = preg_replace($s1,$s2,$html);
+		}
+		$this->htmls[] = $res;
+
+		return $this;
+	}		
+
 	public function match($v)
 	{
 		$v = $this->applyRegOpts($v);
@@ -86,8 +187,27 @@ class PageParser
 					foreach($m as $tmp)
 						$res[] = $tmp;
 			}
-			else
-				$res[$i] = null;
+		}
+		$this->htmls[] = $res;
+
+		return $this;
+	}
+
+	public function matchAll($v)
+	{
+		$v = $this->applyRegOpts($v);
+
+		$htmls = array_pop($this->htmls);
+
+		$res = array();
+		foreach($htmls as $i => $html)
+		{
+			if (preg_match_all($v,$html,$m))
+			{
+				foreach($m as $mm)
+					foreach($mm as $mmm)
+						$res[] = $mmm;
+			}
 		}
 		$this->htmls[] = $res;
 
@@ -133,6 +253,16 @@ class PageParser
 
 		$this->htmls[] = $res;
 
+		return $this;
+	}
+
+	public function rmempty()
+	{
+		$htmls = array_pop($this->htmls);
+		$res = array();
+		foreach($htmls as $i => $html)
+			if ($html) $res[] = $html;
+		$this->htmls[] = $res;
 		return $this;
 	}
 
