@@ -3,6 +3,10 @@
 /* 
 	PageParser class by Kasheftin
 
+		v. 0.14 (2010.11.24)
+			- Some changes in match method (Now $m[0] is not returned in any case)
+		v. 0.13 (2010.11.13)
+			- A new method select (select element) was added.
 		v. 0.12 (2010.11.03)
 			- A new method findAll was added.
 			- A new method replace was added.
@@ -181,7 +185,8 @@ class PageParser
 		{
 			if (preg_match($v,$html,$m))
 			{
-				if (count($m) == 2)
+				unset($m[0]);
+				if (count($m) == 1)
 					$res[$i] = $m[1];
 				else
 					foreach($m as $tmp)
@@ -326,6 +331,28 @@ class PageParser
 	public function end()
 	{
 		$htmls = array_pop($this->htmls);
+		return $this;
+	}
+
+	public function s()
+	{
+		$args = func_get_args();
+		if (!$args || !is_array($args)) return $this;
+
+		foreach($args as $i)
+			$ar[$i] = 1;
+
+		$htmls = array_pop($this->htmls);
+
+		$res = array();
+		foreach($htmls as $i => $html)
+		{
+			if (!$ar[$i]) continue;
+			$res[] = $html;
+		}
+
+		$this->htmls[] = $res;
+
 		return $this;
 	}
 
