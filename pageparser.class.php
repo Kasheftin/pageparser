@@ -1,399 +1,337 @@
 <?php
 
-/* 
-	PageParser class by Kasheftin
-
-		v. 0.14 (2010.11.24)
-			- Some changes in match method (Now $m[0] is not returned in any case)
-		v. 0.13 (2010.11.13)
-			- A new method select (select element) was added.
-		v. 0.12 (2010.11.03)
-			- A new method findAll was added.
-			- A new method replace was added.
-			- A new method select was added.
-		v. 0.11 (2010.11.02)
-			- A new method rmempty was added.
-		v. 0.10 (2010.11.01)
-			- This is the first version of PageParser class.
-*/	
-
 class PageParser
 {
-	protected $htmls = array();
-	protected $opts = array();
+	protected $data = array();
+	protected $level = 0;
 
-	public function __construct($data=null)
+	protected $opts = array(
+		'beforeSaveFunc' => null,
+		'defaultSaveFunc' => null,
+		'afterSaveFunc'	=> null,
+	);
+
+	protected $synonyms = array(
+		'b' => 'begin',
+		'e' => 'end',
+		'sel' => 'select',
+		'del,rm,delete' => 'remove',
+		'selBI,selById' => 'selectById',
+		'delBI,delById,rmBI,rmById,removeBI,deleteBI' => 'removeById',
+	);
+
+	public function __call($m,$a)
 	{
-		if (isset($data)) $this->set($data);
-	}
+		$a = $this->applyOpts($a);
+		$m = $this->findMethod($m);
 
-	public function setOpt($p,$v)
-	{
-		$this->opts[$p] = $v;
-		return $this;
-	}
-
-	public function set($data)
-	{
-		if (is_array($data)) $this->htmls[] = array_values($data);
-		else $this->htmls[] = array(0=>$data);
-		return $this;
-	}
-
-	public function b() { return $this->begin(); }
-	public function e() { return $this->end(); }
-
-	public function find()
-	{
-		$args = func_get_args();
-		$args = $this->applyRegOpts($args);
-
-		if (!$args || !is_array($args)) return $this;
-
-		if (count($args) == 1)
-			return $this->match($args[0]);
-
-		$ar_before = $ar_after = array();
-
-		foreach($args as $i => $v)
+		switch ($m)
 		{
-			if ($b || $i+1 == count($args)) $ar_after[] = $v;
-			elseif ($v == "*") $b = 1;
-			else $ar_before[] = $v;
+			case 'begin':
+				$this->data[] = end($this->data);
+				break;
+			case 'end':
+				array_pop($this->data);
+				break;
+			case 'setOpt':
+				$this->opts[$a[0]] = $a[1];
+				break;
+			case 'set':
+				if (is_array($a[0])) $this->data[] = array_values($a[0]);
+				else $this->data[] = $a;
+				break;
+			case 'each':
+				$this->data[] = $this->recurse('createEach',end($this->data),$a,$this->level);
+				$this->level++;
+				break;
+			case 'endEach':
+				array_pop($this->data);
+				$this->level--;
+				break;
+			default:
+				if (!method_exists($this,$m)) return $this;
+				$this->data[] = $this->recurse($m,array_pop($this->data),$a,$this->level);
 		}
-
-		$htmls = array_pop($this->htmls);
-
-		$res = array();
-		foreach($htmls as $i => $html)
-		{
-			foreach($ar_before as $v)
-			{
-				$ar = preg_split($v,$html,2);
-				$html = $ar[1];
-			}
-
-			foreach($ar_after as $v)
-			{
-				$ar = preg_split($v,$html,2);
-				$html = $ar[0];
-			}
-		
-			$res[$i] = $html;
-		}
-		$this->htmls[] = $res;
-
-		return $this;
-	}
-
-	public function findAll()
-	{
-		$args = func_get_args();
-		$args = $this->applyRegOpts($args);
-
-		if (!$args || !is_array($args)) return $this;
-
-		if (count($args) == 1)
-			return $this->matchAll($args[0]);
-
-		foreach($args as $i => $v)
-		{
-			if ($b || $i+1 == count($args)) $ar_after[] = $v;
-			elseif ($v == "*") $b = 1;
-			else $ar_before[] = $v;
-		}
-
-		$htmls = array_pop($this->htmls);
-
-		$res = array();
-		foreach($htmls as $i => $html)
-		{
-			$html_rest = $html;
-
-			while ($html_rest)
-			{
-				$html_val = $html_rest;
-
-				foreach($ar_before as $v)
-				{
-					$ar = preg_split($v,$html_val,2);
-					$html_val = $ar[1];
-				}
-
-				$html_rest = "";
-
-				foreach($ar_after as $v)
-				{
-					$ar = preg_split($v,$html_val,2);
-					$html_val = $ar[0];
-					if (!$html_rest) $html_rest = $ar[1];
-				}
-
-				$res[] = $html_val;
-			}
-		}
-		$this->htmls[] = $res;
-
-		return $this;
-	}
-
-	public function select()
-	{
-		$args = func_get_args();
-		$args = $this->applyRegOpts($args);
-
-		if (!$args || !is_array($args)) return $this;
-
-		$htmls = array_pop($this->htmls);
-
-		$res = array();
-		foreach($htmls as $i => $html)
-		{
-			foreach($args as $arg)
-				if (!preg_match($arg,$html)) continue 2;
-			$res[] = $html;
-		}
-		$this->htmls[] = $res;
-
-		return $this;
-	}
-
-	public function replace($s1,$s2)
-	{
-		$s1 = $this->applyRegOpts($s1);
-
-		$htmls = array_pop($this->htmls);
-
-		$res = array();
-		foreach($htmls as $i => $html)
-		{
-			$res[$i] = preg_replace($s1,$s2,$html);
-		}
-		$this->htmls[] = $res;
-
-		return $this;
-	}		
-
-	public function match($v)
-	{
-		$v = $this->applyRegOpts($v);
-
-		$htmls = array_pop($this->htmls);
-
-		$res = array();
-		foreach($htmls as $i => $html)
-		{
-			if (preg_match($v,$html,$m))
-			{
-				unset($m[0]);
-				if (count($m) == 1)
-					$res[$i] = $m[1];
-				else
-					foreach($m as $tmp)
-						$res[] = $tmp;
-			}
-		}
-		$this->htmls[] = $res;
-
-		return $this;
-	}
-
-	public function matchAll($v)
-	{
-		$v = $this->applyRegOpts($v);
-
-		$htmls = array_pop($this->htmls);
-
-		$res = array();
-		foreach($htmls as $i => $html)
-		{
-			if (preg_match_all($v,$html,$m))
-			{
-				foreach($m as $mm)
-					foreach($mm as $mmm)
-						$res[] = $mmm;
-			}
-		}
-		$this->htmls[] = $res;
-
-		return $this;
-	}
-		
-	public function split($v,$limit=-1,$take=null)
-	{
-		$v = $this->applyRegOpts($v);
-
-		$htmls = array_pop($this->htmls);
-
-		$res = array();
-		foreach($htmls as $i => $html)
-		{
-			$ar = preg_split($v,$html,$limit);
-			if (isset($take)) $res[$i] = $ar[$take];
-			else
-				foreach($ar as $tmp)
-					$res[] = $tmp;
-		}
-		$this->htmls[] = $res;
-
-		return $this;
-	}
-
-	public function rm()
-	{
-		$args = func_get_args();
-		if (!$args || !is_array($args)) return $this;
-
-		foreach($args as $i)
-			$ar[$i] = 1;
-
-		$htmls = array_pop($this->htmls);
-
-		$res = array();
-		foreach($htmls as $i => $html)
-		{
-			if ($ar[$i]) continue;
-			$res[] = $html;
-		}
-
-		$this->htmls[] = $res;
-
-		return $this;
-	}
-
-	public function rmempty()
-	{
-		$htmls = array_pop($this->htmls);
-		$res = array();
-		foreach($htmls as $i => $html)
-			if ($html) $res[] = $html;
-		$this->htmls[] = $res;
-		return $this;
-	}
-
-	public function DOMFind($start,$end,$obs=null)
-	{
-		$start = $this->applyRegOpts($start);
-		$end = $this->applyRegOpts($end);
-
-		$htmls = array_pop($this->htmls);
-
-		$res = array();
-		foreach($htmls as $i => $html)
-		{
-			if (preg_match($start,$html))
-			{
-				$ar = preg_split($start,$html,2);
-				$html = $base_html = $ar[1];
-				$deep = 0;
-				$ind = 0;
-
-				while (1)
-				{
-					if (preg_match($end,$html))
-					{
-						$ar = preg_split($end,$html,2,PREG_SPLIT_OFFSET_CAPTURE);
-						if (isset($obs))
-							$deep += count(preg_split($obs,$ar[0][0])) - 1;
-
-						if (!$deep)
-						{
-							$ind += strlen($ar[0][0]);
-							$res[$i] = substr($base_html,0,$ind);
-							break;
-						}
-
-						$html = $ar[1][0];
-						$ind += $ar[1][1];
-						$deep--;
-					}
-					else
-					{
-						$res[$i] = $base_html;
-						break;
-					}
-				}
-			}
-			else $res[$i] = null;
-		}
-		$this->htmls[] = $res;
-
-		return $this;
-	}
-
-	public function begin()
-	{
-		$htmls = end($this->htmls);
-		$this->htmls[] = $htmls;
-		return $this;
-	}
-
-	public function end()
-	{
-		$htmls = array_pop($this->htmls);
-		return $this;
-	}
-
-	public function s()
-	{
-		$args = func_get_args();
-		if (!$args || !is_array($args)) return $this;
-
-		foreach($args as $i)
-			$ar[$i] = 1;
-
-		$htmls = array_pop($this->htmls);
-
-		$res = array();
-		foreach($htmls as $i => $html)
-		{
-			if (!$ar[$i]) continue;
-			$res[] = $html;
-		}
-
-		$this->htmls[] = $res;
 
 		return $this;
 	}
 
 	public function save(&$var,$func=null)
 	{
-		$out = end($this->htmls);
-
-		$out_funcs = array($this->opts["beforeSaveFunc"],$func?null:$this->opts["defaultSaveFunc"],$func,$this->opts["afterSaveFunc"]);
-
-		foreach($out_funcs as $func)
-		{
-			if (isset($func) && function_exists($func))
-			{
-				if (is_array($out))
-					foreach($out as $i => $v)
-						$out[$i] = $func($v);
-				else $out = $func($out);
-			}
-		}
-
-		if (is_array($out) && count($out) == 1)
-			$var = reset($out);
-		else
-			$var = $out;
-
+		$var = $this->recurse('escapeVars',end($this->data),array(0=>$func),$this->level);
+		while (is_array($var) && count($var) == 1 && $var[0])
+			$var = $var[0];
 		return $this;
 	}
 
-	protected function applyRegOpts($p)
+
+
+
+	// Workers
+	// Theese methods take $data and $opts, where $data is one dimension array of htmls and return $result, that's also one dimension array of htmls.
+	// Workers usually called through recurse method. 
+
+	protected function createEach($data,$a)
 	{
-		if (is_array($p))
+		foreach($data as &$v)
+			$v = array(0=>$v);
+		return $data;
+	}
+
+	protected function escapeVars($data,$a)
+	{
+		$funcs = array($this->opts['beforeSaveFunc'],$a[0]?$a[0]:$this->opts['defaultSaveFunc'],$this->opts['afterSaveFunc']);
+		foreach($data as &$v)
+			foreach($funcs as $func)
+				if (isset($func) && function_exists($func))
+					$v = $func($v);
+		return $data;
+	}
+
+	protected function split($data,$a)
+	{
+		$res = array();
+		foreach ($data as $i => $v)
 		{
-			foreach($p as $i => $v)
-				$p[$i] = $this->applyRegOpts($v);
+			$ar = preg_split($a[0],$v,(isset($a[1])?$a[1]:null));
+			if (isset($a[2])) $res[$i] = (isset($ar[$a[2]])?$ar[$a[2]]:'');
+			else
+				foreach($ar as $tmp)
+					$res[] = $tmp;
 		}
-		else
+		return $res;
+	}
+
+	protected function find($data,$a) { return $this->find_tmp($data,$a); }
+	protected function findAll($data,$a) { return $this->find_tmp($data,$a,1); }
+	protected function find_tmp($data,$a,$all=0)
+	{
+		if (count($a) == 1)
+			return ($all?$this->matchAll($data,$a):$this->match($data,$a));
+
+		$b = 0;
+		$ar_before = $ar_after = array();
+		foreach($a as $i => $v)
+			if ($b || $i+1 == count($a)) $ar_after[] = $v;
+			elseif ($v == '*') $b = 1;
+			else $ar_before[] = $v;
+
+		$res = array();
+		foreach($data as $i => $html)
 		{
-			if ($this->opts["i"] && preg_match("/\/$/",$p))
-				$p .= "i";
+			while ($html)
+			{
+				$html_val = $html;
+				foreach($ar_before as $v)
+				{
+					$ar = preg_split($v,$html_val,2);
+					$html_val = (isset($ar[1])?$ar[1]:'');
+				}
+				$html = null;
+				foreach($ar_after as $v)
+				{
+					$ar = preg_split($v,$html_val,2);
+					$html_val = (isset($ar[0])?$ar[0]:'');
+					if (!isset($html)) $html = (isset($ar[1])?$ar[1]:'');
+				}
+				if ($html_val && $all) $res[] = $html_val;
+				else $res[$i] = $html_val;
+				if (!$all) break;
+			}
 		}
-		return $p;
+		return $res;			
+	}
+
+	protected function match($data,$a)
+	{
+		$all = 0;
+		$res = $tmp = array();
+		foreach($data as $i => $v)
+			if (preg_match($a[0],$v,$m))
+			{
+				unset($m[0]);
+				if (count($m) > 1) $all = 1;
+				$tmp[$i] = $m;
+			}
+			else $tmp[$i] = array(1=>'');
+		foreach($tmp as $i => $m)
+			if ($all)
+				foreach($m as $v)
+					$res[] = $v;
+			else
+				$res[$i] = $m[1];
+		return $res;
+	}
+
+	protected function matchAll($data,$a)
+	{
+		$res = array();
+		foreach($data as $v)
+			if (preg_match_all($a[0],$v,$m))
+			{
+				unset($m[0]);
+				foreach($m as $mm)
+					foreach($mm as $mmm)
+						$res[] = $mmm;
+			}
+		return $res;
+	}
+
+	protected function DOMFind($data,$a) { return $this->DOMFind_tmp($data,$a); }
+	protected function DOMFindAll($data,$a) { return $this->DOMFind_tmp($data,$a,1); }
+	protected function DOMFind_tmp($data,$a,$all=0)
+	{
+		$res = array();
+		foreach($data as $i => $html)
+		{
+			while (preg_match($a[0],$html))
+			{
+				$ar = preg_split($a[0],$html,2);
+				$html = $base_html = $ar[1];
+				$deep = 0;
+				$ind = 0;
+				while (true)
+				{
+					if (preg_match($a[1],$html))
+					{
+						$ar = preg_split($a[1],$html,2,PREG_SPLIT_OFFSET_CAPTURE);
+						if (isset($a[2]))
+							$deep += count(preg_split($a[2],$ar[0][0])) - 1;
+						if (!$deep)
+						{
+							$ind += strlen($ar[0][0]);
+							if ($all) $res[] = substr($base_html,0,$ind);
+							else $res[$i] = substr($base_html,0,$ind);
+							break;
+						}
+						$html = $ar[1][0];
+						$ind += $ar[1][1];
+						$deep--;
+					}
+					else
+					{
+						if ($all) $res[] = $base_html;
+						else $res[$i] = $base_html;
+						break;
+					}
+				}
+				if (!$all) break;
+			}
+		}
+		return $res;
+	}
+
+	protected function select($data,$a)
+	{
+		$res = array();
+		foreach($data as $html)
+			foreach($a as $v)
+				if (preg_match($v,$html))
+				{
+					$res[] = $html;
+					continue 2;
+				}
+		return $res;
+	}
+
+	protected function remove($data,$a)
+	{
+		$res = array();
+		foreach($data as $html)
+		{
+			foreach($a as $v)
+				if (preg_match($v,$html)) continue 2;
+			$res[] = $html;
+		}
+		return $res;
+	}
+
+	protected function selectById($data,$a)
+	{
+		$ar = $res = array();
+		foreach($a as $i)
+			if ($i >= 0) $ar[$i] = 1;
+			else $ar[count($data)+$i] = 1;
+		foreach($data as $i => $html)
+			if (isset($ar[$i]) && $ar[$i])
+				$res[] = $html;
+		return $res;
+	}
+
+	protected function removeById($data,$a)
+	{
+		$ar = $res = array();
+		foreach($a as $i) 
+			if ($i >= 0) $ar[$i] = 1;
+			else $ar[count($data)+$i] = 1;
+		foreach($data as $i => $html)
+			if (!isset($ar[$i]) || !$ar[$i])
+				$res[] = $html;
+		return $res;
+	}
+
+	protected function rmempty($data,$a)
+	{
+		return $this->select($data,array(0=>"/[\w\W]+/"));
+	}
+
+	protected function apply($data,$a)
+	{
+		foreach($data as &$v)
+			if (!function_exists($a[0]))
+				$v = $a[0]($v);
+		return $data;
+	}
+
+	protected function replace($data,$a)
+	{
+		foreach($data as &$v)
+			$v = preg_replace($a[0],$a[1],$v);
+		return $data;
+	}
+
+
+
+
+	// Very important recurse method
+
+	protected function recurse($func,$data,$a,$level)
+	{
+		if ($level)
+		{
+			$res = array();
+			foreach($data as $v)
+			{
+				$tmp = $this->recurse($func,$v,$a,$level-1);
+				if ($tmp) $res[] = $tmp;
+			}
+			return $res;
+		}
+		elseif (method_exists($this,$func))
+		{
+			$tmp = $this->$func($data,$a);
+			return ($tmp?$tmp:null);
+		}
+	}
+
+
+
+
+	// Other functions
+
+	protected function applyOpts($a)
+	{
+		foreach($a as $i => $v)
+			if (isset($this->opts["i"]) && $this->opts["i"] && preg_match("/\/$/",$v))
+				$a[$i] .= "i";
+		return $a;
+	}
+
+	protected function findMethod($m)
+	{
+		foreach($this->synonyms as $i => $v)
+			if (stripos(',,'.$i.',',','.$m.','))
+				return $v;
+		return $m;
 	}
 }
-	
