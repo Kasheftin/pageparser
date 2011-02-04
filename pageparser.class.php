@@ -134,7 +134,7 @@ class PageParser
 					$html_val = (isset($ar[0])?$ar[0]:'');
 					if (!isset($html)) $html = (isset($ar[1])?$ar[1]:'');
 				}
-				if ($html_val && $all) $res[] = $html_val;
+				if ($all) { if ($html_val) $res[] = $html_val; }
 				else $res[$i] = $html_val;
 				if (!$all) break;
 			}
