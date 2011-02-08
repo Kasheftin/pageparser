@@ -73,8 +73,10 @@ class PageParser
 
 	protected function createEach($data,$a)
 	{
-		foreach($data as &$v)
-			$v = array(0=>$v);
+		if ($data && is_array($data))
+			foreach($data as &$v)
+				$v = array(0=>$v);
+		else $v = array(0=>"");
 		return $data;
 	}
 
@@ -300,11 +302,12 @@ class PageParser
 		if ($level)
 		{
 			$res = array();
-			foreach($data as $v)
-			{
-				$tmp = $this->recurse($func,$v,$a,$level-1);
-				if ($tmp) $res[] = $tmp;
-			}
+			if ($data && is_array($data))
+				foreach($data as $v)
+				{
+					$tmp = $this->recurse($func,$v,$a,$level-1);
+					if ($tmp) $res[] = $tmp;
+				}
 			return $res;
 		}
 		elseif (method_exists($this,$func))
