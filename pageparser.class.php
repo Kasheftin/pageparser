@@ -15,9 +15,9 @@ class PageParser
 		'b' => 'begin',
 		'e' => 'end',
 		'sel' => 'select',
-		'del,rm,delete' => 'remove',
+		'del,rm,delete,rem' => 'remove',
 		'selBI,selById' => 'selectById',
-		'delBI,delById,rmBI,rmById,removeBI,deleteBI' => 'removeById',
+		'delBI,delById,rmBI,rmById,removeBI,deleteBI,remBI,remById' => 'removeById',
 	);
 
 	public function __call($m,$a)
