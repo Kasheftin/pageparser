@@ -56,10 +56,15 @@ class PageParser
 		return $this;
 	}
 
+	public function __construct($a=null)
+	{
+		if (isset($a)) $this->__call("set",func_get_args());
+	}
+
 	public function save(&$var,$func=null)
 	{
 		$var = $this->recurse('escapeVars',end($this->data),array(0=>$func),$this->level);
-		while (is_array($var) && count($var) == 1 && $var[0])
+		while (is_array($var) && count($var) == 1 && isset($var[0]))
 			$var = $var[0];
 		return $this;
 	}
