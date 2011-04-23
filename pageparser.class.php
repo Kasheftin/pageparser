@@ -9,6 +9,7 @@ class PageParser
 		'beforeSaveFunc' => null,
 		'defaultSaveFunc' => null,
 		'afterSaveFunc'	=> null,
+		'smartSaving' => 1,
 	);
 
 	protected $synonyms = array(
@@ -64,8 +65,9 @@ class PageParser
 	public function save(&$var,$func=null)
 	{
 		$var = $this->recurse('escapeVars',end($this->data),array(0=>$func),$this->level);
-		while (is_array($var) && count($var) == 1 && isset($var[0]))
-			$var = $var[0];
+		if ($this->opts["smartSaving"])
+			while (is_array($var) && count($var) == 1 && isset($var[0]))
+				$var = $var[0];
 		return $this;
 	}
 
