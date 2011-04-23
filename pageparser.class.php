@@ -41,6 +41,10 @@ class PageParser
 				if (is_array($a[0])) $this->data[] = array_values($a[0]);
 				else $this->data[] = $a;
 				break;
+			case 'reset':
+				$this->data = array();
+				$this->level = 0;
+				break;
 			case 'each':
 				$this->data[] = $this->recurse('createEach',end($this->data),$a,$this->level);
 				$this->level++;
@@ -90,10 +94,11 @@ class PageParser
 	protected function escapeVars($data,$a)
 	{
 		$funcs = array($this->opts['beforeSaveFunc'],$a[0]?$a[0]:$this->opts['defaultSaveFunc'],$this->opts['afterSaveFunc']);
-		foreach($data as &$v)
-			foreach($funcs as $func)
-				if (isset($func) && function_exists($func))
-					$v = $func($v);
+		if (isset($data) && is_array($data))
+			foreach($data as &$v)
+				foreach($funcs as $func)
+					if (isset($func) && function_exists($func))
+						$v = $func($v);
 		return $data;
 	}
 
